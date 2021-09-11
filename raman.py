@@ -6,7 +6,9 @@ import matplotlib.pyplot as plt
 # raman.py
 # Tom Trebisky  9-11-2021
 
-datafile = "data.rruff"
+# Symbolic links don't work on Windows.
+#datafile = "data.rruff"
+datafile = "BM_APT3-2_780_Hi.rruff"
 
 f = open ( datafile, 'r')
 data = np.genfromtxt(f, delimiter=',')
