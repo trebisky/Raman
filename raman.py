@@ -2,6 +2,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 
 # raman.py
 # Tom Trebisky  9-11-2021
@@ -9,6 +10,8 @@ import matplotlib.pyplot as plt
 # Symbolic links don't work on Windows.
 #datafile = "data.rruff"
 datafile = "BM_APT3-2_780_Hi.rruff"
+
+print ( os.name )
 
 f = open ( datafile, 'r')
 data = np.genfromtxt(f, delimiter=',')
