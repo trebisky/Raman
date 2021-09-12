@@ -62,9 +62,13 @@ def plot_file ( path ) :
 
 #plot_file ( datafile )
 
-# file 1882 is Calcite with 2406 data points
-index = 1882
-calcite = os.path.join ( spectra_lib_dir, files[index] )
+calcite_file = "Calcite__R040070__Raman__532__0__unoriented__Raman_Data_Processed__15330.txt"
+
+# on linux, file 1882 is Calcite with 2406 data points
+# on windows, file 1882 fetches Galkhaite
+#index = 1882
+#calcite = os.path.join ( spectra_lib_dir, files[index] )
+calcite = os.path.join ( spectra_lib_dir, calcite_file )
 plot_file ( calcite )
 
 # Files in the reference library have names like this:
