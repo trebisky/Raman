@@ -9,6 +9,7 @@
 import wx
 import os
 import sys
+import numpy as np
 
 # Geometry for initial layout
 xsize = 800
@@ -38,20 +39,162 @@ if not os.path.isdir ( spectra_lib_dir ) :
     print ( "Cannot find spectra library:", spectra_lib_dir )
     exit ()
 
+# This is called to open and load data from what
+# should be a CSV file with Raman data.
+# XXX - it needs error recovery if it is passed
+#  ridiculous files (or the path itself cannot be opened).
+#
+# A CSV file of the sort we read, simply looks like this:
+#  8.803156e+001,0.000000e+000
+#  8.851367e+001,4.551096e+002
+# No header or any variety whatsoever.
+
+class Raman_Data () :
+        def __init__ ( self, path ) :
+            self.path = path
+            self.is_good = False
+
+            # ensure we can open the file
+            try:
+                with open ( path, 'r') as file:
+                    first = file.readline()
+            except IOError:
+                print ( "Cannot open file '%s'." % path )
+                return
+
+            # weak validation, we ensure the first line
+            # has exactly one comma in it.
+            ccount = first.count ( ',' )
+            if ccount != 1 :
+                print ( "Not a CSV file: %s" % path )
+                return
+
+            with open ( path, 'r') as file:
+                self.read_file_data (file)
+
+            self.xx = self.data[:,0]
+            self.yy = self.data[:,1]
+
+            self.xmin = np.amin ( self.xx )
+            self.xmax = np.amax ( self.xx )
+            self.xrange = self.xmax - self.xmin
+
+            self.ymin = np.amin ( self.yy )
+            self.ymax = np.amax ( self.yy )
+            self.yrange = self.ymax - self.ymin
+
+            # Can adjust to give Y a margin
+            self.ybot = self.ymin
+
+            print ( "X range: ", self.xrange )
+            print ( "Y range: ", self.yrange )
+
+            self.is_good = True
+
+        def scale_data ( self, win ) :
+            if not self.is_good :
+                return
+
+            self.win = win
+            self.xy = []
+
+            # We can adjust this to center data, etc.
+            yrang = self.yrange
+
+            for i in range(len(self.xx)) :
+                xf = (self.xx[i] - self.xmin) / self.xrange
+                #yf = (self.yy[i] - self.ymin) / self.yrange
+                yf = (self.yy[i] - self.ybot) / yrang
+
+                ix = win.xoff + np.int_ ( win.xsize * xf )
+                iy = win.yoff + np.int_ ( win.ysize * (1.0-yf) )
+                self.xy.append ( (ix,iy) )
+
+        # This is called with the file open
+        def read_file_dataC ( self, file ) :
+            count = 0
+            for line in file:
+                count += 1
+            print ( count, " lines in file" )
+
+        def read_file_data ( self, file ) :
+            # leverage numpy to read CSV
+            self.data = np.genfromtxt ( file, delimiter=',' )
+            nn = len(self.data)
+            print ( "Read", nn, " points" )
+
+
 # The left panel has the graph
 class Left_Panel ( wx.Panel ) :
-        def __init__ ( self, parent, data ) :
+        def __init__ ( self, parent ) :
             wx.Panel.__init__ ( self, parent )
-            self.data = data
+
+            self.data = None
+
+            self.lmargin = 40   # left only
+            self.ymargin = 10   # top and bottom
+
+            self.SetBackgroundColour ( wx.RED )
+
+            # various events
+            self.Bind ( wx.EVT_SIZE, self.onResize )
+            self.Bind ( wx.EVT_PAINT, self.OnPaint )
+
+            #self.Bind ( wx.EVT_MOTION, self.OnMove )
+
+            # set up viewport
+            self.xoff = 0   # lmargin
+            self.yoff = 0   # ymargin
+            self.xsize = xsize
+            self.ysize = ysize
+
+        # We get 3 resize events just starting up.
+        # we need this to refresh after resize
+        # also to post width for Move checks
+        def onResize ( self, event ) :
+            print ( "resize!" )
+            self.width = event.Size.width
+            self.height = event.Size.height
+            # XXX more is needed
+
+        def PostData ( self, data ) :
+            self.data = data.xy
+
+        def PaintData ( self ) :
+            if not self.data :
+                return
+
+            dc = wx.PaintDC ( self )
+            dc.SetPen ( wx.Pen(wx.BLUE, 2) )
+
+            lastxy = None
+
+            for xy in self.data :
+                if xy and lastxy :
+                    dc.DrawLine ( lastxy[0], lastxy[1], xy[0], xy[1] )
+                lastxy = xy
+
+
+        # We get lots of paint events, for reasons I don't understand,
+        # and not simply related to cursor motion.
+        def OnPaint ( self, event ) :
+            print ( "Paint!" )
+
+            dc = wx.PaintDC ( self )
+            dc.Clear ()
+
+            #w, h = self.GetSize()
+
+            self.PaintData ()
+
         def update ( self ) :
             pass
 
 # The right panel has buttons and controls
 class Right_Panel ( wx.Panel ) :
-        def __init__ ( self, parent, data, left ) :
+        def __init__ ( self, parent, left ) :
             wx.Panel.__init__ ( self, parent )
 
-            self.data = data
             self.left = left
 
             rsz = wx.BoxSizer ( wx.VERTICAL )
@@ -92,13 +235,6 @@ class Right_Panel ( wx.Panel ) :
         def update ( self, is_new ) :
             pass
 
-        # This is called with the file open
-        def read_file_data ( self, file ) :
-            count = 0
-            for line in file:
-                count += 1
-            print ( count, " lines in file" )
-
         # Tkinter was always a pain in the ass wanting you
         # to call a destroy method and spewing out weird messages
         # whatever you did. wxPython just works nicely if you do this.
@@ -125,17 +261,20 @@ class Right_Panel ( wx.Panel ) :
                 pathname = fileDialog.GetPath()
                 print ( "Selected file: %s" % pathname )
 
-                try:
-                    with open(pathname, 'r') as file:
-                        self.read_file_data(file)
-                except IOError:
-                    wx.LogError("Cannot open file '%s'." % pathname)
+                self.data = Raman_Data ( pathname )
+                if not self.data.is_good :
+                    printf ( "No good data" )
+                    return;
+                self.data.scale_data ( self.left );
+                print ( "Data has been scaled" )
+                self.left.PostData ( self.data )
 
         def onUpdate ( self, event ) :
             print ( "Useless update button was pushed" )
             self.update ( True )
             self.left.update ()
 
+# Completely bogus
 class Temp_Data () :
 
     def __init__ ( self ) :
@@ -156,8 +295,8 @@ class Temp_Frame ( wx.Frame ):
             #splitter = wx.SplitterWindow ( self, -1 )
             splitter = wx.SplitterWindow(self, style = wx.SP_LIVE_UPDATE)
 
-            self.lpanel = Left_Panel ( splitter, data )
-            self.rpanel = Right_Panel ( splitter, data, self.lpanel )
+            self.lpanel = Left_Panel ( splitter )
+            self.rpanel = Right_Panel ( splitter, self.lpanel )
 
             # only left side grows
             splitter.SetSashGravity ( 1.0 )
@@ -175,8 +314,7 @@ class Temp_Frame ( wx.Frame ):
             #print ( "Tick" )
             if self.data.new_data () :
                 #print ( "Data arrived" )
-                self.data.check_battery ()
-                self.data.gather_data ( None )
+                #self.data.gather_data ( None )
                 self.lpanel.update ()
                 self.rpanel.update ( True )
             else:
