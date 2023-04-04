@@ -57,25 +57,34 @@ class Right_Panel ( wx.Panel ) :
             rsz = wx.BoxSizer ( wx.VERTICAL )
             self.SetSizer ( rsz )
 
-            bup = wx.Panel ( self, -1 )
-            self.b_up = wx.Button ( bup, wx.ID_ANY, "Update")
+            bp1 = wx.Panel ( self, -1 )
+            self.b_up = wx.Button ( bp1, wx.ID_ANY, "Update")
             self.b_up.Bind ( wx.EVT_BUTTON, self.onUpdate )
 
-            self.b_ex = wx.Button ( bup, wx.ID_ANY, "Exit")
+            self.b_ex = wx.Button ( bp1, wx.ID_ANY, "Exit")
             self.b_ex.Bind ( wx.EVT_BUTTON, self.onExit )
 
-            self.b_op = wx.Button ( bup, wx.ID_ANY, "Open")
+            self.b_op = wx.Button ( bp1, wx.ID_ANY, "Open")
             self.b_op.Bind ( wx.EVT_BUTTON, self.onOpen )
 
-            bus = wx.BoxSizer ( wx.HORIZONTAL )
-            #bus.Add ( self.b_up, 1, wx.EXPAND )
-            bus.Add ( self.b_up, proportion=0 )
-            #bus.Add ( self.b_ex, 1, wx.EXPAND )
-            bus.Add ( self.b_ex, proportion=0 )
-            bus.Add ( self.b_op, proportion=0 )
-            bup.SetSizer ( bus )
+            b1 = wx.BoxSizer ( wx.HORIZONTAL )
+            #b1.Add ( self.b_up, 1, wx.EXPAND )
+            b1.Add ( self.b_up, proportion=0 )
+            #b1.Add ( self.b_ex, 1, wx.EXPAND )
+            b1.Add ( self.b_ex, proportion=0 )
+            b1.Add ( self.b_op, proportion=0 )
+            bp1.SetSizer ( b1 )
 
-            rsz.Add ( bup, 1, wx.EXPAND )
+            bp2 = wx.Panel ( self, -1 )
+            self.b_se = wx.Button ( bp2, wx.ID_ANY, "Select")
+            self.b_se.Bind ( wx.EVT_BUTTON, self.onSelect )
+
+            b2 = wx.BoxSizer ( wx.HORIZONTAL )
+            b2.Add ( self.b_se, proportion=0 )
+            bp2.SetSizer ( b2 )
+
+            rsz.Add ( bp1, 1, wx.EXPAND )
+            rsz.Add ( bp2, 1, wx.EXPAND )
 
             self.update ( True )
             self.left.update ();
@@ -96,6 +105,10 @@ class Right_Panel ( wx.Panel ) :
         # Not only that, you can just type Control-C without irritation.
         def onExit ( self, event ) :
             sys.exit ()
+
+        def onSelect ( self, event ) :
+            print ( "Let's select a file." )
+            pass
 
         # Handler for file open button
         def onOpen ( self, event ) :

@@ -6,8 +6,12 @@ import os
 import sys
 from random import randint
 
-# raman.py
-# Tom Trebisky  9-11-2021
+import tkinter as tk
+from tkinter import filedialog
+
+# raman2.py
+# Tom Trebisky  9-11-2021 10-15-2021
+# The idea now is to combine tkinter and matplotlib
 
 # Symbolic links don't work on Windows.
 #datafile = "data.rruff"
@@ -29,16 +33,32 @@ if not os.path.isdir ( spectra_lib_dir ) :
     print ( "Cannot find spectra library:", spectra_lib_dir )
     exit ()
 
+# Given a path with an RRUF project filename,
+# extract the name of the mineral and the laser wavelength
+# /home/tom/RamanLib/Actinolite__R040063__Raman__532__0__unoriented__Raman_Data_Processed__15158.txt
+def rruf_extract ( path ) :
+    species = "junk"
+    laser = "555"
+    w = path.split ( '__' )
+    species = w[0].split ('/')[-1]
+    laser = w[3]
+    return species, laser
 
 def plot_file ( path ) :
     print ( "Plotting data from file:", path )
+
     f = open ( path, 'r')
     data = np.genfromtxt(f, delimiter=',')
     f.close()
-    nn = len(data)
-    print ( "Plotting", nn, " points" )
+
+    species, laser = rruf_extract ( path )
+    title = species + " " + laser + " nm"
+
+    #print ( "Plotting", len(data), " points" )
+
     #plt.plot ( data[:,0], data[:,1], 'o' )
     plt.plot ( data[:,0], data[:,1] )
+    plt.title ( title )
     plt.show()
 
 
@@ -127,17 +147,30 @@ def file_inventory () :
     print ( "Num of 785 =", n_785 )
     print ( "Num of unk =", n_x )
 
+def plot_calcite () :
+
+    #plot_file ( datafile )
+
+    calcite_file = "Calcite__R040070__Raman__532__0__unoriented__Raman_Data_Processed__15330.txt"
+
+    # on linux, file 1882 is Calcite with 2406 data points
+    # on windows, file 1882 fetches Galkhaite
+    #index = 1882
+    #calcite = os.path.join ( spectra_lib_dir, files[index] )
+    calcite = os.path.join ( spectra_lib_dir, calcite_file )
+    plot_file ( calcite )
+
 #file_inventory ()
+#plot_calcite ()
 
-#plot_file ( datafile )
+root = tk.Tk()
+root.withdraw()
 
-calcite_file = "Calcite__R040070__Raman__532__0__unoriented__Raman_Data_Processed__15330.txt"
+file_path = filedialog.askopenfilename ( initialdir = spectra_lib_dir )
+# print ( file_path )
 
-# on linux, file 1882 is Calcite with 2406 data points
-# on windows, file 1882 fetches Galkhaite
-#index = 1882
-#calcite = os.path.join ( spectra_lib_dir, files[index] )
-calcite = os.path.join ( spectra_lib_dir, calcite_file )
-plot_file ( calcite )
+# This works.  The above file dialog vanishes and the matplotlib plot appears
+# with its menubar.  Not too shabby.
+plot_file ( file_path )
 
 # THE END
