@@ -11,8 +11,10 @@ import os
 import sys
 import numpy as np
 
-# Global variable point to graph object (left side)
-graph = None
+# Global variables point to major objects
+graph = None    # graph object (left side)
+library = None
+display_list = []
 
 # Geometry for initial layout
 xsize = 800
@@ -33,12 +35,12 @@ timer_delay = 1000    # milliseconds
 #print ( sys.platform )
 
 if ( sys.platform == "linux" ) :
-    spectra_lib_dir = os.path.expanduser ( "~/RamanLib" )
+    raman_lib_dir = os.path.expanduser ( "~/RamanLib" )
 else :
-    spectra_lib_dir = "\CrystalSleuth\SearchRecords\RamanLib"
+    raman_lib_dir = "\CrystalSleuth\SearchRecords\RamanLib"
 
-if not os.path.isdir ( spectra_lib_dir ) :
-    print ( "Cannot find spectra library:", spectra_lib_dir )
+if not os.path.isdir ( raman_lib_dir ) :
+    print ( "Cannot find Raman library:", raman_lib_dir )
     exit ()
 
 # This is called to open and load data from what
@@ -96,28 +98,29 @@ class Raman_Data () :
             print ( "X range: ", self.xrange )
             print ( "Y range: ", self.yrange )
 
-            self.scale_data ( graph );
+            self.scale_data ();
 
             self.is_good = True
 
-        def scale_data ( self, win ) :
+        def scale_data ( self ) :
 
-            self.win = win
             self.xy = []
 
             # We can adjust this to center data, etc.
             yrang = self.yrange
 
-            print ( "Scaling ", len(self.xx), " points" )
+            #print ( "Scaling ", len(self.xx), " points" )
 
             for i in range(len(self.xx)) :
                 xf = (self.xx[i] - self.xmin) / self.xrange
                 #yf = (self.yy[i] - self.ymin) / self.yrange
                 yf = (self.yy[i] - self.ybot) / yrang
 
-                ix = win.xoff + np.int_ ( win.xsize * xf )
-                iy = win.yoff + np.int_ ( win.ysize * (1.0-yf) )
+                ix = graph.xoff + np.int_ ( graph.xsize * xf )
+                iy = graph.yoff + np.int_ ( graph.ysize * (1.0-yf) )
                 self.xy.append ( (ix,iy) )
+
+            #print ( "Data has been scaled" )
 
         # This is called with the file open
         def read_file_dataC ( self, file ) :
@@ -171,9 +174,12 @@ class Left_Panel ( wx.Panel ) :
         # we need this to refresh after resize
         # also to post width for Move checks
         def OnResize ( self, event ) :
-            print ( "resize!" )
+            #print ( "resize!" )
 
             self.setViewport ( event.Size.width, event.Size.height )
+
+            for d in self.data :
+                d.scale_data ()
 
             self.update ();
 
@@ -182,13 +188,13 @@ class Left_Panel ( wx.Panel ) :
             self.data.append ( data )
 
         def PaintData ( self ) :
-            print ( "PaintData 1" )
+            #print ( "PaintData 1" )
             # loop through data objects
             for d in self.data :
                 dc = wx.PaintDC ( self )
                 #dc.SetPen ( wx.Pen(wx.BLUE, 2) )
                 dc.SetPen ( wx.Pen( d.color, 2) )
-                print ( "PaintData 2", d.color, len(d.xy) )
+                #print ( "PaintData 2", d.color, len(d.xy) )
 
                 lastxy = None
                 for xy in d.xy :
@@ -199,7 +205,7 @@ class Left_Panel ( wx.Panel ) :
         # We get lots of paint events, for reasons I don't understand,
         # and not simply related to cursor motion.
         def OnPaint ( self, event ) :
-            print ( "Paint!" )
+            #print ( "Paint!" )
 
             dc = wx.PaintDC ( self )
             dc.Clear ()
@@ -290,7 +296,6 @@ class Right_Panel ( wx.Panel ) :
                     printf ( "No good data" )
                     return;
 
-                print ( "Data has been scaled" )
                 graph.PostData ( self.data )
                 graph.update ()
 
@@ -299,15 +304,17 @@ class Right_Panel ( wx.Panel ) :
             self.update ( True )
             graph.update ()
 
-class Temp_Frame ( wx.Frame ):
+class Raman_Frame ( wx.Frame ):
 
         def __init__ ( self, parent, title ):
             # Here is a stupid python design concept
             global graph
 
             wsize = ( xsize, ysize )
-            wx.Frame.__init__(self, None, wx.ID_ANY, title, size=wsize )
+            top = wx.Frame.__init__(self, None, wx.ID_ANY, title, size=wsize )
             #top = wx.Frame.__init__(self, None, wx.ID_ANY, title, pos=(a,b), size=wsize )
+
+            self.menu_setup ()
 
             #splitter = wx.SplitterWindow ( self, -1 )
             splitter = wx.SplitterWindow(self, style = wx.SP_LIVE_UPDATE)
@@ -328,6 +335,59 @@ class Temp_Frame ( wx.Frame ):
             self.Bind ( wx.EVT_TIMER, self.timer_update, self.timer )
             self.timer.Start ( timer_delay )
 
+        def menu_setup ( self ) :
+
+            filemenu= wx.Menu()
+            #openFileItem = fileMenu.Append(wx.ID_OPEN, '&Open\tCTRL+O', "Open File")
+            o_menu = filemenu.Append ( wx.ID_OPEN, "Open", "Open")
+            s_menu = filemenu.Append ( 101, "Select", "Select")
+            #filemenu.Append(wx.ID_ABOUT, "About","About")
+            e_menu = filemenu.Append ( wx.ID_EXIT, "Exit", "Exit")
+
+            self.Bind ( wx.EVT_MENU, self.OpenFile, o_menu )
+            self.Bind ( wx.EVT_MENU, self.SelectFile, s_menu )
+            #self.Bind ( wx.EVT_MENU, self.Exit, e_menu )
+
+            # I considered making it possible to just click on the "Exit"
+            # in the menubar, but decided that two clicks to exit was fine.
+            exitmenu= wx.Menu()
+            ee_menu = exitmenu.Append ( wx.ID_EXIT, "Exit", "Exit")
+            self.Bind ( wx.EVT_MENU, self.Exit, ee_menu )
+
+            bar = wx.MenuBar()
+            bar.Append ( filemenu, "File" )
+            bar.Append ( exitmenu, "Exit" )
+            self.SetMenuBar ( bar )
+
+        def SelectFile ( self, event ) :
+            print ( "Select file" )
+
+        def OpenFile ( self, event ) :
+            print ( "Let's open a file (2)!" )
+
+            #wildcard="XYZ files (*.xyz)|*.xyz",
+            with wx.FileDialog(self, "Open Raman data file",
+               style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as fileDialog:
+
+                if fileDialog.ShowModal() == wx.ID_CANCEL:
+                    return     # the user changed their mind
+
+                # Proceed loading the file chosen by the user
+                pathname = fileDialog.GetPath()
+                print ( "Selected file: %s" % pathname )
+
+                data = Raman_Data ( pathname )
+                if not data.is_good :
+                    printf ( "Ain't got no good data" )
+                    return;
+
+                print ( "Data has been scaled" )
+                graph.PostData ( data )
+                graph.update ()
+
+        def Exit ( self, event ) :
+            sys.exit ()
+
         # Called at 1 Hz
         # I doubt whether the Raman tool will need this
         def timer_update ( self, event ) :
@@ -345,9 +405,84 @@ class Temp_Frame ( wx.Frame ):
 class Raman_GUI ( wx.App ):
         def __init__ ( self ) :
             wx.App.__init__(self)
-            frame = Temp_Frame ( None, "Turbo Raman" )
+            frame = Raman_Frame ( None, "Turbo Raman" )
             self.SetTopWindow ( frame )
             frame.Show ( True )
+
+# There are some weird foreign non-ascii characters in some of the files
+# and python does not like them:
+# Cobaltarthurite__R070224__Raman__532__0__unoriented__Raman_Data_Processed__25613.txt
+# UnicodeDecodeError: 'utf-8' codec can't decode byte 0xc3 in position 73: invalid continuation byte
+# For this file, the trouble is in the LOCALITY data:
+##LOCALITY=Dolores prospect, Pastrana, MazarrÃ³n-Ã?guilas, Murcia, Spain
+
+class Raman_Lib_File () :
+        def __init__ ( self, file, fpath, cheat ) :
+            self.file = file
+            self.fpath = fpath
+
+            # This gets the species name from the filename, which gives
+            # for example "BastnasiteCe"
+            if cheat :
+                self.species = file[:file.index("_")]
+                return
+
+            # We get something somewhat nicer from inside the file,
+            # namely Bastnasite-(Ce), but the price for this niceness
+            # is that we must open each file and read the first line.
+            # On linux this is slow the first time, but then the file
+            #  data cache is loaded and it is quite fast after that.
+            #print ( file )
+            with open ( fpath, 'r') as f:
+                    first = f.readline().rstrip()
+            self.species = first[first.index("=")+1:]
+
+            print ( self.species )
+
+# A typical filename looks like this:
+# Benitoite__R050332__Raman__514__0__unoriented__Raman_Data_Processed__10941.txt
+# Thse are not simple CSV files, but have some header information as follows:
+##NAMES=Benitoite
+##LOCALITY=San Benito County, California, USA
+##RRUFFID=R050320
+##CHEMISTRY=BaTiSi_3_O_9_
+#
+# Each header line begins with a pair of "#" pound signs
+# Not only that, but the data ends with "##END="
+# which may be followed by several blank lines and possible
+# other rubbish.
+#
+# My library (circa 1890) has 5133 files.
+# No subdirectories, so the "isfile" check below is superfluous.
+# 4 of these files are special things for Crystal Sleuth,
+# namely:
+# RamanSearchFileFast.rsf
+# RamanSearchFileSlow.rsf
+# RamanSearchNameList.rsf
+# RamanSearchNameInfo.rsf
+
+# We effectively black list this species because of the weird characters
+# in the locality, maybe someday we will return and do something about this.
+bogus_species = "Cobaltarthurite"
+
+class Raman_Library () :
+        def __init__ ( self ) :
+            self.files = []
+            for file in os.listdir ( raman_lib_dir ):
+                fpath = os.path.join ( raman_lib_dir, file )
+                # use the filename for the species name, but this will just
+                # bite us later (maybe) if/when we try to read the spectrum
+                #if file == bogus_file :
+                #    self.files.append ( Raman_Lib_File ( file, fpath, True ) )
+                #    continue
+                if file.startswith ( bogus_species ) :
+                    continue
+                #print ( "Lib: ", file, fpath )
+                if os.path.isfile ( fpath ) and file.endswith ( "txt" ) :
+                    self.files.append ( Raman_Lib_File ( file, fpath, False ) )
+
+library = Raman_Library ()
+print ( 'Library has: ', len(library.files), " files")
 
 app = Raman_GUI ()
 app.MainLoop()
