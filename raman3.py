@@ -11,10 +11,12 @@ import os
 import sys
 import numpy as np
 
+# Global variable point to graph object (left side)
+graph = None
+
 # Geometry for initial layout
 xsize = 800
 ysize = 600
-wsize = ( xsize, ysize )
 
 # The right side needs about 250 pixels
 right_size =250
@@ -41,13 +43,14 @@ if not os.path.isdir ( spectra_lib_dir ) :
 
 # This is called to open and load data from what
 # should be a CSV file with Raman data.
-# XXX - it needs error recovery if it is passed
-#  ridiculous files (or the path itself cannot be opened).
 #
 # A CSV file of the sort we read, simply looks like this:
 #  8.803156e+001,0.000000e+000
 #  8.851367e+001,4.551096e+002
 # No header or any variety whatsoever.
+#
+# We will end up with several objects of this sort,
+# one for each file this is visible and/or in use
 
 class Raman_Data () :
         def __init__ ( self, path ) :
@@ -72,6 +75,10 @@ class Raman_Data () :
             with open ( path, 'r') as file:
                 self.read_file_data (file)
 
+            # XXX
+            # each data item should get a unique color
+            self.color = wx.BLUE
+
             self.xx = self.data[:,0]
             self.yy = self.data[:,1]
 
@@ -89,17 +96,19 @@ class Raman_Data () :
             print ( "X range: ", self.xrange )
             print ( "Y range: ", self.yrange )
 
+            self.scale_data ( graph );
+
             self.is_good = True
 
         def scale_data ( self, win ) :
-            if not self.is_good :
-                return
 
             self.win = win
             self.xy = []
 
             # We can adjust this to center data, etc.
             yrang = self.yrange
+
+            print ( "Scaling ", len(self.xx), " points" )
 
             for i in range(len(self.xx)) :
                 xf = (self.xx[i] - self.xmin) / self.xrange
@@ -129,51 +138,63 @@ class Left_Panel ( wx.Panel ) :
         def __init__ ( self, parent ) :
             wx.Panel.__init__ ( self, parent )
 
-            self.data = None
-
-            self.lmargin = 40   # left only
-            self.ymargin = 10   # top and bottom
+            # list of data objects being displayed
+            self.data = []
 
             self.SetBackgroundColour ( wx.RED )
 
+            # set up starting size
+            self.setViewport ( xsize, ysize )
+
             # various events
-            self.Bind ( wx.EVT_SIZE, self.onResize )
+            self.Bind ( wx.EVT_SIZE, self.OnResize )
             self.Bind ( wx.EVT_PAINT, self.OnPaint )
 
             #self.Bind ( wx.EVT_MOTION, self.OnMove )
 
-            # set up viewport
+
+        def setViewport ( self, w, h ) :
+
+            self.width = w
+            self.height = h
+
+            # not yet
+            self.lmargin = 40   # left only
+            self.ymargin = 10   # top and bottom
+
             self.xoff = 0   # lmargin
             self.yoff = 0   # ymargin
-            self.xsize = xsize
-            self.ysize = ysize
+            self.xsize = w
+            self.ysize = h
 
         # We get 3 resize events just starting up.
         # we need this to refresh after resize
         # also to post width for Move checks
-        def onResize ( self, event ) :
+        def OnResize ( self, event ) :
             print ( "resize!" )
-            self.width = event.Size.width
-            self.height = event.Size.height
-            # XXX more is needed
+
+            self.setViewport ( event.Size.width, event.Size.height )
+
+            self.update ();
 
         def PostData ( self, data ) :
-            self.data = data.xy
+            #self.data = data.xy
+            self.data.append ( data )
 
         def PaintData ( self ) :
-            if not self.data :
-                return
+            print ( "PaintData 1" )
+            # loop through data objects
+            for d in self.data :
+                dc = wx.PaintDC ( self )
+                #dc.SetPen ( wx.Pen(wx.BLUE, 2) )
+                dc.SetPen ( wx.Pen( d.color, 2) )
+                print ( "PaintData 2", d.color, len(d.xy) )
 
-            dc = wx.PaintDC ( self )
-            dc.SetPen ( wx.Pen(wx.BLUE, 2) )
-
-            lastxy = None
-
-            for xy in self.data :
-                if xy and lastxy :
-                    dc.DrawLine ( lastxy[0], lastxy[1], xy[0], xy[1] )
-                lastxy = xy
-
+                lastxy = None
+                for xy in d.xy :
+                    if xy and lastxy :
+                        dc.DrawLine ( lastxy[0], lastxy[1], xy[0], xy[1] )
+                    lastxy = xy
 
         # We get lots of paint events, for reasons I don't understand,
         # and not simply related to cursor motion.
@@ -188,14 +209,13 @@ class Left_Panel ( wx.Panel ) :
             self.PaintData ()
 
         def update ( self ) :
-            pass
+            # trigger a repaint
+            self.Refresh ()
 
 # The right panel has buttons and controls
 class Right_Panel ( wx.Panel ) :
-        def __init__ ( self, parent, left ) :
+        def __init__ ( self, parent ) :
             wx.Panel.__init__ ( self, parent )
-
-            self.left = left
 
             rsz = wx.BoxSizer ( wx.VERTICAL )
             self.SetSizer ( rsz )
@@ -229,11 +249,15 @@ class Right_Panel ( wx.Panel ) :
             rsz.Add ( bp1, 1, wx.EXPAND )
             rsz.Add ( bp2, 1, wx.EXPAND )
 
+            # XXX ??
             self.update ( True )
-            self.left.update ();
 
+        # probably nothing to do unless new data requires
+        # an repaint of information on the screen
         def update ( self, is_new ) :
-            pass
+            # trigger a repaint
+            self.Refresh ()
+            #pass
 
         # Tkinter was always a pain in the ass wanting you
         # to call a destroy method and spewing out weird messages
@@ -265,38 +289,33 @@ class Right_Panel ( wx.Panel ) :
                 if not self.data.is_good :
                     printf ( "No good data" )
                     return;
-                self.data.scale_data ( self.left );
+
                 print ( "Data has been scaled" )
-                self.left.PostData ( self.data )
+                graph.PostData ( self.data )
+                graph.update ()
 
         def onUpdate ( self, event ) :
             print ( "Useless update button was pushed" )
             self.update ( True )
-            self.left.update ()
-
-# Completely bogus
-class Temp_Data () :
-
-    def __init__ ( self ) :
-        pass
-
-    # check for new data
-    def new_data ( self ) :
-        return False
+            graph.update ()
 
 class Temp_Frame ( wx.Frame ):
 
-        def __init__ ( self, parent, title, data ):
+        def __init__ ( self, parent, title ):
+            # Here is a stupid python design concept
+            global graph
+
+            wsize = ( xsize, ysize )
             wx.Frame.__init__(self, None, wx.ID_ANY, title, size=wsize )
             #top = wx.Frame.__init__(self, None, wx.ID_ANY, title, pos=(a,b), size=wsize )
-
-            self.data = data
 
             #splitter = wx.SplitterWindow ( self, -1 )
             splitter = wx.SplitterWindow(self, style = wx.SP_LIVE_UPDATE)
 
             self.lpanel = Left_Panel ( splitter )
-            self.rpanel = Right_Panel ( splitter, self.lpanel )
+            self.rpanel = Right_Panel ( splitter )
+
+            graph = self.lpanel
 
             # only left side grows
             splitter.SetSashGravity ( 1.0 )
@@ -310,23 +329,23 @@ class Temp_Frame ( wx.Frame ):
             self.timer.Start ( timer_delay )
 
         # Called at 1 Hz
+        # I doubt whether the Raman tool will need this
         def timer_update ( self, event ) :
             #print ( "Tick" )
-            if self.data.new_data () :
-                #print ( "Data arrived" )
-                #self.data.gather_data ( None )
-                self.lpanel.update ()
-                self.rpanel.update ( True )
-            else:
-                self.rpanel.update ( False )
+            pass
+            #if self.data.new_data () :
+            #    #print ( "Data arrived" )
+            #    #self.data.gather_data ( None )
+            #    self.lpanel.update ()
+            #    self.rpanel.update ( True )
+            #else:
+            #    self.rpanel.update ( False )
 
 
 class Raman_GUI ( wx.App ):
         def __init__ ( self ) :
             wx.App.__init__(self)
-            data = Temp_Data ()
-            #data = None
-            frame = Temp_Frame ( None, "Turbo Raman", data )
+            frame = Temp_Frame ( None, "Turbo Raman" )
             self.SetTopWindow ( frame )
             frame.Show ( True )
 
