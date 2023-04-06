@@ -4,6 +4,19 @@
 # Tom Trebisky  4-3-2023
 # Use wxPython for basic file operations
 
+# .........................
+"""
+Todo --
+
+* wx.FileDropTarget allows files to be dropped onto some thing
+
+* check on univeral X axis scale
+* X axis scale flipping
+* Unknown data trend and background removal
+* Searching
+
+"""
+
 # ---------------------------------------
 
 import wx
@@ -14,6 +27,7 @@ import numpy as np
 # Global variables point to major objects
 graph = None    # graph object (left side)
 library = None
+
 display_list = []
 
 # Geometry for initial layout
@@ -55,31 +69,25 @@ if not os.path.isdir ( raman_lib_dir ) :
 # one for each file this is visible and/or in use
 
 class Raman_Data () :
-        def __init__ ( self, path ) :
+        def __init__ ( self, path, is_unknown ) :
             self.path = path
             self.is_good = False
+            self.is_unknown = is_unknown
 
-            # ensure we can open the file
-            try:
-                with open ( path, 'r') as file:
-                    first = file.readline()
-            except IOError:
-                print ( "Cannot open file '%s'." % path )
-                return
-
-            # weak validation, we ensure the first line
-            # has exactly one comma in it.
-            ccount = first.count ( ',' )
-            if ccount != 1 :
-                print ( "Not a CSV file: %s" % path )
+            if not self.validate () :
                 return
 
             with open ( path, 'r') as file:
                 self.read_file_data (file)
 
+            self.is_good = True
+
             # XXX
             # each data item should get a unique color
-            self.color = wx.BLUE
+            if is_unknown :
+                self.color = wx.BLACK
+            else :
+                self.color = wx.BLUE
 
             self.xx = self.data[:,0]
             self.yy = self.data[:,1]
@@ -100,7 +108,30 @@ class Raman_Data () :
 
             self.scale_data ();
 
-            self.is_good = True
+
+        def validate ( self ) :
+
+            # ensure we can open the file
+            # also read the first line
+            try:
+                with open ( self.path, 'r') as file:
+                    first = file.readline()
+            except IOError:
+                print ( "Cannot open file '%s'." % self.path )
+                return False
+
+            # Library files start with this.
+            if first.startswith ( "##" ) :
+                return True
+
+            # weak validation, we ensure the first line
+            # has exactly one comma in it.
+            ccount = first.count ( ',' )
+            if ccount == 1 :
+                return True
+
+            print ( "Not a CSV file: %s" % self.path )
+            return False
 
         def scale_data ( self ) :
 
@@ -141,10 +172,8 @@ class Left_Panel ( wx.Panel ) :
         def __init__ ( self, parent ) :
             wx.Panel.__init__ ( self, parent )
 
-            # list of data objects being displayed
-            self.data = []
-
-            self.SetBackgroundColour ( wx.RED )
+            #self.SetBackgroundColour ( wx.RED )
+            self.SetBackgroundColour ( "light grey" )
 
             # set up starting size
             self.setViewport ( xsize, ysize )
@@ -178,21 +207,16 @@ class Left_Panel ( wx.Panel ) :
 
             self.setViewport ( event.Size.width, event.Size.height )
 
-            for d in self.data :
+            for d in display_list :
                 d.scale_data ()
 
             self.update ();
 
-        def PostData ( self, data ) :
-            #self.data = data.xy
-            self.data.append ( data )
-
         def PaintData ( self ) :
             #print ( "PaintData 1" )
             # loop through data objects
-            for d in self.data :
+            for d in display_list :
                 dc = wx.PaintDC ( self )
-                #dc.SetPen ( wx.Pen(wx.BLUE, 2) )
                 dc.SetPen ( wx.Pen( d.color, 2) )
                 #print ( "PaintData 2", d.color, len(d.xy) )
 
@@ -266,7 +290,6 @@ class Right_Panel ( wx.Panel ) :
         def update ( self, is_new ) :
             # trigger a repaint
             self.Refresh ()
-            #pass
 
         # Tkinter was always a pain in the ass wanting you
         # to call a destroy method and spewing out weird messages
@@ -279,7 +302,7 @@ class Right_Panel ( wx.Panel ) :
             #print ( "Let's select a file." )
             pass
 
-        # Handler for file open button
+        # Handler for file open button (now gone)
         def onOpen ( self, event ) :
             print ( "Let's open a file!" )
 
@@ -294,18 +317,131 @@ class Right_Panel ( wx.Panel ) :
                 pathname = fileDialog.GetPath()
                 print ( "Selected file: %s" % pathname )
 
-                self.data = Raman_Data ( pathname )
+                self.data = Raman_Data ( pathname, True )
                 if not self.data.is_good :
                     printf ( "No good data" )
                     return;
 
-                graph.PostData ( self.data )
+                #graph.PostData ( self.data )
+                display_list.append ( self.data )
                 graph.update ()
 
         def onUpdate ( self, event ) :
             print ( "Useless update button was pushed" )
             self.update ( True )
             graph.update ()
+
+class MyDialog2 ( wx.Frame ) :
+        def __init__ ( self, parent ) :
+            wx.Frame.__init__ ( self, None, -1, "choices", size=(200,500) )
+
+            # This is to catch when user clicks the window manager
+            # control to close this subwindow.
+            self.Bind ( wx.EVT_CLOSE, self.OnClose, self )
+
+            self.parent = parent
+
+            self.choice_a = [ "good", "bad", "ugly" ]
+            self.want_a = True
+            self.choice_b = [ "curly", "moe", "larry" ]
+
+            panel = wx.Panel ( self )
+            box = wx.BoxSizer ( wx.VERTICAL )
+
+            t = wx.TextCtrl ( panel, -1, "your ad here", size = (-1,-1) )
+            t.SetInsertionPoint ( 0 )
+            self.text = t
+            box.Add ( t, 0 )
+
+            self.Bind ( wx.EVT_TEXT, self.OnText, t )
+
+            self.mytext = ""
+
+            self.lbox_size = 20
+            lb = wx.ListBox ( panel )
+            box.Add ( lb, -1, wx.EXPAND | wx.ALL, self.lbox_size )
+            self.listbox = lb
+
+            b1 = wx.Button ( panel, label="Done" )
+            box.Add ( b1, 0 )
+            self.Bind ( wx.EVT_BUTTON, self.OnDone, b1 )
+
+            #b2 = wx.Button ( panel, label="Load" )
+            #box.Add ( b2, 0 )
+            #self.Bind ( wx.EVT_BUTTON, self.OnLoad, b2 )
+
+            #b3 = wx.Button ( panel, label="Clear" )
+            #box.Add ( b3, 0 )
+            #self.Bind ( wx.EVT_BUTTON, self.OnClear, b3 )
+
+            panel.SetSizer ( box )
+            self.Centre ()
+
+        # However we terminate the dialog, we end up here.
+        def capture_info ( self ) :
+            sel = self.listbox.GetSelection()
+            if sel == -1 :
+                return
+
+            print ( "Selection = ", sel )
+            text = self.listbox.GetString(sel)
+            print ( "Selection text = ", text )
+
+            lib_data = self.list[sel]
+            print ( "Open: ", lib_data.fpath )
+            data = Raman_Data ( lib_data.fpath, False )
+            if not data.is_good :
+                printf ( "Library data file in wrong format" )
+                return;
+
+            display_list.append ( data )
+            # Zoro
+
+        # Called when the window manager kills the window
+        # For some crazy reason, this will go into a recursion loop
+        # unless we destroy the window.
+        def OnClose ( self, event ) :
+            self.capture_info ()
+            self.Destroy ()
+
+        # This is nicer (called from the Done button)
+        def OnDone ( self, event ) :
+            self.capture_info ()
+            self.Close ()
+
+        # Set and Clear don't seem to be documented methods
+        #def OnClear ( self, event ) :
+        #    self.listbox.Clear ()
+
+        def OnText ( self, event ) :
+            txt = self.text.GetValue ()
+            print ( "Text = ", txt )
+            if len(txt) < 2 :
+                print ( "Not enough" )
+                return
+
+            txt = txt.capitalize()
+
+            count = 0
+            for f in library.files :
+                if f.species.startswith ( txt ) :
+                    count += 1
+            print ( count, " files match" )
+
+            if count > self.lbox_size :
+                print ( "Too many" )
+                return
+
+            # When selection is done, the first item is 0
+            # "info" is what is displayed in the listbox
+            # "self.list" has the same order, but has file paths
+            info = []
+            self.list = []
+            for f in library.files :
+                if f.species.startswith ( txt ) :
+                    info.append ( f.species )
+                    self.list.append ( f )
+            self.listbox.Set ( info )
 
 class Raman_Frame ( wx.Frame ):
 
@@ -362,7 +498,16 @@ class Raman_Frame ( wx.Frame ):
             bar.Append ( exitmenu, "Exit" )
             self.SetMenuBar ( bar )
 
+        # We just launch the dialog without worrying about making it
+        # Modal.  Also we don't worry about getting results from it
+        # in this class, it will inject any results itself
         def SelectFile ( self, event ) :
+            d2 = MyDialog2 ( self )
+            d2.Show ()
+            #self.select_dialog = d2
+
+        # I never made this work, delete it someday
+        def OldSelectFile ( self, event ) :
             print ( "Select file" )
             init_list = [ 'good', 'bad', 'ugly' ]
             x = event.GetEventObject ()
@@ -375,6 +520,7 @@ class Raman_Frame ( wx.Frame ):
             s.Show ()
             s.Popup ( focus=self )
 
+        # This opens the users unknow file
         def OpenFile ( self, event ) :
             print ( "Let's open a file (2)!" )
 
@@ -389,13 +535,14 @@ class Raman_Frame ( wx.Frame ):
                 pathname = fileDialog.GetPath()
                 print ( "Selected file: %s" % pathname )
 
-                data = Raman_Data ( pathname )
+                data = Raman_Data ( pathname, True )
                 if not data.is_good :
                     printf ( "Ain't got no good data" )
                     return;
 
-                print ( "Data has been scaled" )
-                graph.PostData ( data )
+                #print ( "Data has been scaled" )
+                #graph.PostData ( data )
+                display_list.append ( data )
                 graph.update ()
 
         def Exit ( self, event ) :
@@ -414,6 +561,7 @@ class Raman_Frame ( wx.Frame ):
             #else:
             #    self.rpanel.update ( False )
 
+# XXX - never worked, delete this someday
 class Select_Dialog ( wx.PopupTransientWindow ) :
         def __init__ ( self, parent, style, init_data ) :
             #super().__init__ ( self, parent, style )
@@ -513,8 +661,17 @@ class Raman_GUI ( wx.App ):
             self.SetTopWindow ( frame )
             frame.Show ( True )
 
+# XXX what would be better would be to launch the GUI,
+# but use the status bar to indicate this.
+# Better yet, speed this up by reading a single summary file,
+# either the .rsf file from Crystal Sleuth or something we
+# generate.
+print ( "Initializing, please wait ..." )
+
 library = Raman_Library ()
 print ( 'Library has: ', len(library.files), " files")
+
+print ( "Initialization done." )
 
 app = Raman_GUI ()
 app.MainLoop()
