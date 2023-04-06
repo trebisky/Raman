@@ -46,8 +46,9 @@ class MyDialog2 ( wx.Frame ) :
 
             self.mytext = ""
 
+            self.list_size = 20
             lb = wx.ListBox ( panel )
-            box.Add ( lb, -1, wx.EXPAND | wx.ALL, 20 )
+            box.Add ( lb, -1, wx.EXPAND | wx.ALL, self.list_size )
             self.listbox = lb
 
             b1 = wx.Button ( panel, label="Done" )
@@ -91,6 +92,27 @@ class MyDialog2 ( wx.Frame ) :
         def OnText ( self, event ) :
             txt = self.text.GetValue ()
             print ( "Text = ", txt )
+            if len(txt) < 2 :
+                print ( "Not enough" )
+                return
+
+            txt = txt.capitalize()
+
+            count = 0
+            for name in lib :
+                if name.startswith ( txt ) :
+                    count += 1
+            print ( count, " files match" )
+
+            if count > self.list_size :
+                print ( "Too many" )
+                return
+
+            info = []
+            for name in lib :
+                if name.startswith ( txt ) :
+                    info.append ( name )
+            self.listbox.Set ( info )
 
         # This is pretty ugly (i.e. very low level)
         # You get every key press as a bare code
@@ -214,6 +236,44 @@ class Pop_GUI ( wx.App ):
         def OnExit ( self ) :
             print ( "On exit called" )
             return True
+
+# We effectively black list this species because of the weird characters
+# in the locality, maybe someday we will return and do something about this.
+# If I was the only one using the program, I would edit the two files in
+# the library and get rid of the nasty characters, but other people will
+# hopefully use the program and it is unreasonable to expect them to do that.
+bogus_species = "Cobaltarthurite"
+
+if ( sys.platform == "linux" ) :
+    raman_lib_dir = os.path.expanduser ( "~/RamanLib" )
+else :
+    raman_lib_dir = "\CrystalSleuth\SearchRecords\RamanLib"
+
+if not os.path.isdir ( raman_lib_dir ) :
+    print ( "Cannot find Raman library:", raman_lib_dir )
+    exit ()
+
+class Raman_Library () :
+        def __init__ ( self ) :
+            self.files = []
+
+            for file in os.listdir ( raman_lib_dir ):
+                fpath = os.path.join ( raman_lib_dir, file )
+                # use the filename for the species name, but this will just
+                # bite us later (maybe) if/when we try to read the spectrum
+                #if file == bogus_file :
+                #    self.files.append ( Raman_Lib_File ( file, fpath, True ) )
+                #    continue
+                if file.startswith ( bogus_species ) :
+                    continue
+                #print ( "Lib: ", file, fpath )
+                if os.path.isfile ( fpath ) and file.endswith ( "txt" ) :
+                    species = file[:file.index("_")]
+                    self.files.append ( species )
+
+# I see 5127 files (excluding the 2 blacklisted)
+lib = Raman_Library ().files
+print ( len(lib), " files found" )
 
 app = Pop_GUI ()
 
