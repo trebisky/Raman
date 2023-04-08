@@ -68,7 +68,28 @@ if not os.path.isdir ( raman_lib_dir ) :
 # We will end up with several objects of this sort,
 # one for each file this is visible and/or in use
 
+
 class Raman_Data () :
+
+        # Class variables!
+        #colors = [ wx.BLUE, wx.GREEN, wx.RED, wx.PURPLE, wx.YELLOW ]
+        #colors = [ wx.BLUE, wx.GREEN, wx.RED, wx.VIOLET, wx.YELLOW ]
+        #colors = [ wx.BLUE, wx.GREEN, wx.RED, wx.MAGENTA, wx.YELLOW ]
+
+        # For some reason I don't understand, only R, G, B (and yellow)
+        # seem to be defined.
+        # And the guys who wrote wxPython must be Brits
+
+        # creating a color like this just does not work. Mysteries!
+        #p = wx.Colour ( 176, 0, 255, True ) # PURPLE
+        p = wx.Colour ( 79, 47, 79, True ) # VIOLET
+        #colors = [ wx.BLUE, wx.GREEN, wx.RED, p, wx.YELLOW ]
+
+        # 4 colors will have to do until the above gets solved
+        colors = [ wx.BLUE, wx.GREEN, wx.RED, p, wx.YELLOW ]
+
+        color_index = 0
+
         def __init__ ( self, path, is_unknown ) :
             self.path = path
             self.is_good = False
@@ -82,12 +103,14 @@ class Raman_Data () :
 
             self.is_good = True
 
-            # XXX
-            # each data item should get a unique color
             if is_unknown :
                 self.color = wx.BLACK
             else :
-                self.color = wx.BLUE
+                print ( "Color index = ", Raman_Data.color_index )
+                if Raman_Data.color_index >= 5 :
+                    return
+                self.color = Raman_Data.colors[Raman_Data.color_index]
+                Raman_Data.color_index += 1
 
             self.xx = self.data[:,0]
             self.yy = self.data[:,1]
@@ -348,12 +371,18 @@ class MyDialog2 ( wx.Frame ) :
             panel = wx.Panel ( self )
             box = wx.BoxSizer ( wx.VERTICAL )
 
-            t = wx.TextCtrl ( panel, -1, "your ad here", size = (-1,-1) )
+            #t = wx.TextCtrl ( panel, -1, "your ad here", size = (-1,-1) )
+            t = wx.TextCtrl ( panel, -1, "", size = (-1,-1) )
             t.SetInsertionPoint ( 0 )
             self.text = t
             box.Add ( t, 0 )
 
             self.Bind ( wx.EVT_TEXT, self.OnText, t )
+
+            msg = str(len(library.files)) + " files"
+            stat = wx.StaticText ( panel, wx.ID_ANY, msg )
+            box.Add ( stat, 0 )
+            self.stat = stat
 
             self.mytext = ""
 
@@ -401,7 +430,11 @@ class MyDialog2 ( wx.Frame ) :
         # For some crazy reason, this will go into a recursion loop
         # unless we destroy the window.
         def OnClose ( self, event ) :
-            self.capture_info ()
+            # Done (below) will cause a close event, and we
+            # don't want to open the file twice.
+            # If the user just closes via the window manager
+            # control, we assume he wanted to abort the whole business.
+            #self.capture_info ()
             self.Destroy ()
 
         # This is nicer (called from the Done button)
@@ -415,21 +448,19 @@ class MyDialog2 ( wx.Frame ) :
 
         def OnText ( self, event ) :
             txt = self.text.GetValue ()
-            print ( "Text = ", txt )
-            if len(txt) < 2 :
-                print ( "Not enough" )
-                return
-
             txt = txt.capitalize()
+            #print ( "Text = ", txt )
 
             count = 0
             for f in library.files :
                 if f.species.startswith ( txt ) :
                     count += 1
-            print ( count, " files match" )
+            #print ( count, " files match" )
+            msg = str(count) + " files"
+            self.stat.SetLabel ( msg )
 
             if count > self.lbox_size :
-                print ( "Too many" )
+                #print ( "Too many" )
                 return
 
             # When selection is done, the first item is 0
