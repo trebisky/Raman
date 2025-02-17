@@ -26,6 +26,7 @@ import numpy as np
 
 # Global variables point to major objects
 graph = None    # graph object (left side)
+files = None    # files object (right side)
 library = None
 
 display_list = []
@@ -90,10 +91,11 @@ class Raman_Data () :
 
         color_index = 0
 
-        def __init__ ( self, path, is_unknown ) :
+        def __init__ ( self, path, name, is_unknown ) :
             self.path = path
             self.is_good = False
             self.is_unknown = is_unknown
+            self.species = name
 
             if not self.validate () :
                 return
@@ -264,95 +266,59 @@ class Left_Panel ( wx.Panel ) :
         def update ( self ) :
             # trigger a repaint
             self.Refresh ()
+            print ( "graph update done" )
 
-# The right panel has buttons and controls
+# Originally, the right panel had buttons and controls
+# But these moved to the menu bar.
+# Now the right panel shows the files being displayed
 class Right_Panel ( wx.Panel ) :
         def __init__ ( self, parent ) :
             wx.Panel.__init__ ( self, parent )
 
             #self.old_layout ()
+            self.new_layout ()
 
-        def old_layout ( self ) :
+        def nuke_layout ( self ) :
+            # I have not yet tried the following
+            self.sizer.Clear ( True)
+            # the remove call removes and destroys
+            #for t in self.list :
+            #    self.sizer.Remove ( t )
+            #self.sizer.Destroy ()
+
+        def new_layout ( self ) :
             rsz = wx.BoxSizer ( wx.VERTICAL )
+            self.sizer = rsz
+            self.list = []
+
+            name = "Waldo"
+            t = wx.StaticText ( self, wx.ID_ANY, name )
+            rsz.Add ( t, proportion=0 )
+            self.list.append ( t )
+
+            name = "Alligator"
+            t = wx.StaticText ( self, wx.ID_ANY, name )
+            rsz.Add ( t, proportion=0 )
+
+            self.list.append ( t )
+
+            for f in display_list :
+                print ( f )
+                name = f.species
+                t = wx.StaticText ( self, wx.ID_ANY, name )
+                rsz.Add ( t, proportion=0 )
+            self.list.append ( t )
+
             self.SetSizer ( rsz )
 
-            bp1 = wx.Panel ( self, -1 )
-            self.b_up = wx.Button ( bp1, wx.ID_ANY, "Update")
-            self.b_up.Bind ( wx.EVT_BUTTON, self.onUpdate )
-
-            self.b_ex = wx.Button ( bp1, wx.ID_ANY, "Exit")
-            self.b_ex.Bind ( wx.EVT_BUTTON, self.onExit )
-
-            self.b_op = wx.Button ( bp1, wx.ID_ANY, "Open")
-            self.b_op.Bind ( wx.EVT_BUTTON, self.onOpen )
-
-            b1 = wx.BoxSizer ( wx.HORIZONTAL )
-            #b1.Add ( self.b_up, 1, wx.EXPAND )
-            b1.Add ( self.b_up, proportion=0 )
-            #b1.Add ( self.b_ex, 1, wx.EXPAND )
-            b1.Add ( self.b_ex, proportion=0 )
-            b1.Add ( self.b_op, proportion=0 )
-            bp1.SetSizer ( b1 )
-
-            bp2 = wx.Panel ( self, -1 )
-            self.b_se = wx.Button ( bp2, wx.ID_ANY, "Select")
-            self.b_se.Bind ( wx.EVT_BUTTON, self.onSelect )
-
-            b2 = wx.BoxSizer ( wx.HORIZONTAL )
-            b2.Add ( self.b_se, proportion=0 )
-            bp2.SetSizer ( b2 )
-
-            rsz.Add ( bp1, 1, wx.EXPAND )
-            rsz.Add ( bp2, 1, wx.EXPAND )
-
-            # ??
-            #self.update ( True )
-
-        # probably nothing to do unless new data requires
-        # an repaint of information on the screen
-        def update ( self, is_new ) :
+        # Called when we have added a new file to the display
+        # We don't so much need a repaint, but it never hurts
+        def update ( self ) :
+            self.nuke_layout ()
+            self.new_layout ()
             # trigger a repaint
             self.Refresh ()
-
-        # Tkinter was always a pain in the ass wanting you
-        # to call a destroy method and spewing out weird messages
-        # whatever you did. wxPython just works nicely if you do this.
-        # Not only that, you can just type Control-C without irritation.
-        def onExit ( self, event ) :
-            sys.exit ()
-
-        def onSelect ( self, event ) :
-            #print ( "Let's select a file." )
-            pass
-
-        # Handler for file open button (now gone)
-        def onOpen ( self, event ) :
-            print ( "Let's open a file!" )
-
-            #wildcard="XYZ files (*.xyz)|*.xyz",
-            with wx.FileDialog(self, "Open Raman data file",
-               style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as fileDialog:
-
-                if fileDialog.ShowModal() == wx.ID_CANCEL:
-                    return     # the user changed their mind
-
-                # Proceed loading the file chosen by the user
-                pathname = fileDialog.GetPath()
-                print ( "Selected file: %s" % pathname )
-
-                self.data = Raman_Data ( pathname, True )
-                if not self.data.is_good :
-                    printf ( "No good data" )
-                    return;
-
-                #graph.PostData ( self.data )
-                display_list.append ( self.data )
-                graph.update ()
-
-        def onUpdate ( self, event ) :
-            print ( "Useless update button was pushed" )
-            self.update ( True )
-            graph.update ()
+            print ( "files update done" )
 
 class MyDialog2 ( wx.Frame ) :
         def __init__ ( self, parent ) :
@@ -418,12 +384,15 @@ class MyDialog2 ( wx.Frame ) :
 
             lib_data = self.list[sel]
             print ( "Open: ", lib_data.fpath )
-            data = Raman_Data ( lib_data.fpath, False )
+            data = Raman_Data ( lib_data.fpath, lib_data.species, False )
             if not data.is_good :
                 printf ( "Library data file in wrong format" )
                 return;
 
+            #Add the "select" file to the display list
             display_list.append ( data )
+            graph.update ()
+            files.update ()
             # Zoro
 
         # Called when the window manager kills the window
@@ -479,6 +448,7 @@ class Raman_Frame ( wx.Frame ):
         def __init__ ( self, parent, title ):
             # Here is a stupid python design concept
             global graph
+            global files
 
             wsize = ( xsize, ysize )
             top = wx.Frame.__init__(self, None, wx.ID_ANY, title, size=wsize )
@@ -493,6 +463,7 @@ class Raman_Frame ( wx.Frame ):
             self.rpanel = Right_Panel ( splitter )
 
             graph = self.lpanel
+            files = self.rpanel
 
             # only left side grows
             splitter.SetSashGravity ( 1.0 )
@@ -551,7 +522,7 @@ class Raman_Frame ( wx.Frame ):
             s.Show ()
             s.Popup ( focus=self )
 
-        # This opens the users unknow file
+        # This opens the users unknown file
         def OpenFile ( self, event ) :
             print ( "Let's open a file (2)!" )
 
@@ -566,7 +537,7 @@ class Raman_Frame ( wx.Frame ):
                 pathname = fileDialog.GetPath()
                 print ( "Selected file: %s" % pathname )
 
-                data = Raman_Data ( pathname, True )
+                data = Raman_Data ( pathname, "- unknown -", True )
                 if not data.is_good :
                     printf ( "Ain't got no good data" )
                     return;
@@ -574,8 +545,13 @@ class Raman_Frame ( wx.Frame ):
                 #print ( "Data has been scaled" )
                 #graph.PostData ( data )
                 display_list.append ( data )
+                files.update ()
                 graph.update ()
 
+        # Tkinter was always a pain in the ass wanting you
+        # to call a destroy method and spewing out weird messages
+        # whatever you did. wxPython just works nicely if you do this.
+        # Not only that, you can just type Control-C without irritation.
         def Exit ( self, event ) :
             sys.exit ()
 
